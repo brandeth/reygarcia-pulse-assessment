@@ -1,9 +1,6 @@
 export type DescType = "offer" | "answer" | "ice";
 export type PeerControl =
-  | "video-request"
-  | "video-accept"
-  | "video-decline"
-  | "video-end";
+  "video-request" | "video-accept" | "video-decline" | "video-end";
 
 interface PeerCallbacks {
   onSignal: (type: DescType, payload: string) => void;
@@ -129,7 +126,7 @@ export class PeerSession {
   }
 
   sendChat(text: string) {
-    this.safeSend({ t: "msg", text });
+    this.safeSend({ t: "chat", text });
   }
 
   sendControl(ctrl: PeerControl) {
