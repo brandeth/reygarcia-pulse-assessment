@@ -26,11 +26,34 @@ _Format: **Symptom** — root cause (file:line) · how I found it · fix._
   report. A clean tab close hides it (`sendBeacon` → `/api/leave`), so it only
   shows when a user leaves without a clean leave.
   · Fixed by scoping the heartbeat to the caller: `where: { id }`.
+- **Users stuck "busy" after a chat** — once a chat ended, both dots stayed
+  dimmed and every new request to either user was auto-declined. `accept` set
+  `busy` on both users, but only `decline` cleared it — not `end` — even though
+  the comment says "decline/end"
+  ([app/api/signal/route.ts:79](app/api/signal/route.ts:79)).
+  · Found by reproducing (connect → End → reconnect → "Request declined") and
+  comparing the comment with the code.
+  · Fixed by clearing `busy` on `end` too.
+- **Chat stuck on "Connecting…"** — the request was accepted but the data
+  channel never opened. ICE candidates that arrive before the offer/answer are
+  queued, but the queue was flushed *before* `setRemoteDescription`
+  ([lib/webrtc.ts:107](lib/webrtc.ts:107)). `addIceCandidate` fails without a
+  remote description and the error was swallowed, so the peers never learned
+  each other's addresses. Polling delivers signals in 1.5 s batches (and the
+  fire-and-forget POSTs can land out of order), so candidates almost always
+  arrive in the same batch as, or before, the SDP.
+  · Found when a two-window test hung on "Connecting…"; traced the signal
+  handling order in `PeerSession.handleSignal`.
+  · Fixed by flushing queued candidates right after `setRemoteDescription`.
 
 **Verify:**
 - Chat: connect two windows; messages appear on both sides.
 - Ghost dots: with one window open, add a user that never polls
   (`POST /api/join` with a test id via curl). Its dot disappears within ~15–17 s.
+- Busy: connect, End, then request the same user again — they get the prompt,
+  and both dots are back to full brightness.
+- Connecting: after Accept, both panels switch to "Connected" within a few
+  seconds, every time.
 
 ---
 
@@ -71,3 +94,5 @@ Ranked by impact. Status is updated as fixes land.
 - STUN-only (no TURN) is kept, per the README — some strict networks won't connect.
 - Stayed on Prisma 7.x; did not adopt the 8.0 release candidate the CLI suggests
   (a major, pre-release upgrade is out of scope and risky for the deliverable).
+- `end` frees both ids it names unconditionally; the server doesn't track who is
+  connected to whom, so partner-aware clearing is deferred (Task 7 / Phase 3).
