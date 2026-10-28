@@ -12,9 +12,25 @@ called out inline.
 
 _Format: **Symptom** — root cause (file:line) · how I found it · fix._
 
-- _TBD_
+- **Chat messages never arrived** — the sender's own bubble showed, but the
+  other side got nothing. `sendChat` sent `{ t: "msg" }` while the data-channel
+  handler only accepts `t === "chat"`, so every message was silently dropped
+  ([lib/webrtc.ts:129](lib/webrtc.ts:129) vs [lib/webrtc.ts:76](lib/webrtc.ts:76)).
+  · Found by tracing the send and receive paths in `PeerSession`.
+  · Fixed by sending `t: "chat"`.
+- **Ghost dots stayed on the map** — users who crashed or lost connection
+  never disappeared. The poll heartbeat ran `updateMany({ where: {} })`, so any
+  single poll refreshed *every* row's `lastSeen` and the stale reaper never
+  found anything ([app/api/poll/route.ts:26](app/api/poll/route.ts:26)).
+  · Found by reading the heartbeat/reap logic against the README's example
+  report. A clean tab close hides it (`sendBeacon` → `/api/leave`), so it only
+  shows when a user leaves without a clean leave.
+  · Fixed by scoping the heartbeat to the caller: `where: { id }`.
 
-**Verify:** _TBD_
+**Verify:**
+- Chat: connect two windows; messages appear on both sides.
+- Ghost dots: with one window open, add a user that never polls
+  (`POST /api/join` with a test id via curl). Its dot disappears within ~15–17 s.
 
 ---
 
@@ -53,3 +69,5 @@ Ranked by impact. Status is updated as fixes land.
 ## Assumptions & trade-offs
 
 - STUN-only (no TURN) is kept, per the README — some strict networks won't connect.
+- Stayed on Prisma 7.x; did not adopt the 8.0 release candidate the CLI suggests
+  (a major, pre-release upgrade is out of scope and risky for the deliverable).
